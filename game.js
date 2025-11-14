@@ -1,0 +1,553 @@
+// Slime Adventure - Platformer Game
+// Configuration du jeu
+const CONFIG = {
+    TILE_SIZE: 32,
+    GRAVITY: 0.5,
+    JUMP_FORCE: -12,
+    PLAYER_SPEED: 4,
+    ENEMY_SPEED: 1,
+    MAP_WIDTH: 25,
+    MAP_HEIGHT: 19
+};
+
+// Gestionnaire de ressources
+class ResourceManager {
+    constructor() {
+        this.images = {};
+        this.loaded = 0;
+        this.total = 0;
+    }
+
+    loadImage(name, path) {
+        this.total++;
+        return new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => {
+                this.images[name] = img;
+                this.loaded++;
+                resolve(img);
+            };
+            img.onerror = reject;
+            img.src = path;
+        });
+    }
+
+    async loadAll() {
+        const resources = [
+            { name: 'tileset', path: 'Tileset/tileset.png' },
+            { name: 'vegetation', path: 'Tileset/vegetation.png' },
+            { name: 'slime1', path: 'Tileset/slime/slime_f1.png' },
+            { name: 'slime2', path: 'Tileset/slime/slime_f2.png' },
+            { name: 'slime3', path: 'Tileset/slime/slime_f3.png' },
+            { name: 'slime4', path: 'Tileset/slime/slime_f4.png' },
+            { name: 'slime5', path: 'Tileset/slime/slime_f5.png' }
+        ];
+
+        await Promise.all(resources.map(r => this.loadImage(r.name, r.path)));
+    }
+
+    get(name) {
+        return this.images[name];
+    }
+}
+
+// Classe pour gérer les animations
+class Animation {
+    constructor(frames, frameRate = 10) {
+        this.frames = frames;
+        this.frameRate = frameRate;
+        this.currentFrame = 0;
+        this.frameTimer = 0;
+    }
+
+    update(deltaTime) {
+        this.frameTimer += deltaTime;
+        if (this.frameTimer >= 1000 / this.frameRate) {
+            this.currentFrame = (this.currentFrame + 1) % this.frames.length;
+            this.frameTimer = 0;
+        }
+    }
+
+    getCurrentFrame() {
+        return this.frames[this.currentFrame];
+    }
+
+    reset() {
+        this.currentFrame = 0;
+        this.frameTimer = 0;
+    }
+}
+
+// Classe de base pour les entités
+class Entity {
+    constructor(x, y, width, height) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        this.vx = 0;
+        this.vy = 0;
+        this.onGround = false;
+    }
+
+    getBounds() {
+        return {
+            left: this.x,
+            right: this.x + this.width,
+            top: this.y,
+            bottom: this.y + this.height
+        };
+    }
+
+    collidesWith(other) {
+        const a = this.getBounds();
+        const b = other.getBounds();
+        return a.left < b.right && a.right > b.left &&
+               a.top < b.bottom && a.bottom > b.top;
+    }
+}
+
+// Classe joueur
+class Player extends Entity {
+    constructor(x, y) {
+        super(x, y, 24, 24);
+        this.color = '#4CAF50';
+        this.jumpPressed = false;
+        this.facing = 1; // 1 = droite, -1 = gauche
+    }
+
+    update(keys, tilemap) {
+        // Déplacement horizontal
+        this.vx = 0;
+        if (keys['ArrowLeft']) {
+            this.vx = -CONFIG.PLAYER_SPEED;
+            this.facing = -1;
+        }
+        if (keys['ArrowRight']) {
+            this.vx = CONFIG.PLAYER_SPEED;
+            this.facing = 1;
+        }
+
+        // Saut
+        if (keys[' '] && this.onGround && !this.jumpPressed) {
+            this.vy = CONFIG.JUMP_FORCE;
+            this.jumpPressed = true;
+        }
+        if (!keys[' ']) {
+            this.jumpPressed = false;
+        }
+
+        // Gravité
+        this.vy += CONFIG.GRAVITY;
+
+        // Limitation de la vitesse de chute
+        if (this.vy > 15) this.vy = 15;
+
+        // Application de la vitesse
+        this.x += this.vx;
+        this.handleCollisionX(tilemap);
+
+        this.y += this.vy;
+        this.handleCollisionY(tilemap);
+    }
+
+    handleCollisionX(tilemap) {
+        const bounds = this.getBounds();
+        const tiles = tilemap.getTilesInBounds(bounds);
+
+        for (const tile of tiles) {
+            if (tile.solid) {
+                const tileBounds = {
+                    left: tile.x * CONFIG.TILE_SIZE,
+                    right: (tile.x + 1) * CONFIG.TILE_SIZE,
+                    top: tile.y * CONFIG.TILE_SIZE,
+                    bottom: (tile.y + 1) * CONFIG.TILE_SIZE
+                };
+
+                if (bounds.left < tileBounds.right && bounds.right > tileBounds.left &&
+                    bounds.top < tileBounds.bottom && bounds.bottom > tileBounds.top) {
+
+                    if (this.vx > 0) {
+                        this.x = tileBounds.left - this.width;
+                    } else if (this.vx < 0) {
+                        this.x = tileBounds.right;
+                    }
+                    this.vx = 0;
+                }
+            }
+        }
+    }
+
+    handleCollisionY(tilemap) {
+        const bounds = this.getBounds();
+        const tiles = tilemap.getTilesInBounds(bounds);
+        this.onGround = false;
+
+        for (const tile of tiles) {
+            if (tile.solid) {
+                const tileBounds = {
+                    left: tile.x * CONFIG.TILE_SIZE,
+                    right: (tile.x + 1) * CONFIG.TILE_SIZE,
+                    top: tile.y * CONFIG.TILE_SIZE,
+                    bottom: (tile.y + 1) * CONFIG.TILE_SIZE
+                };
+
+                if (bounds.left < tileBounds.right && bounds.right > tileBounds.left &&
+                    bounds.top < tileBounds.bottom && bounds.bottom > tileBounds.top) {
+
+                    if (this.vy > 0) {
+                        this.y = tileBounds.top - this.height;
+                        this.onGround = true;
+                    } else if (this.vy < 0) {
+                        this.y = tileBounds.bottom;
+                    }
+                    this.vy = 0;
+                }
+            }
+        }
+    }
+
+    draw(ctx) {
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+
+        // Yeux simples
+        ctx.fillStyle = 'white';
+        const eyeOffset = this.facing === 1 ? 14 : 6;
+        ctx.fillRect(this.x + eyeOffset, this.y + 8, 4, 4);
+        ctx.fillStyle = 'black';
+        ctx.fillRect(this.x + eyeOffset + 1, this.y + 9, 2, 2);
+    }
+}
+
+// Classe ennemie (Slime)
+class Slime extends Entity {
+    constructor(x, y, resourceManager) {
+        super(x, y, 32, 32);
+        this.resourceManager = resourceManager;
+        this.animation = new Animation([
+            'slime1', 'slime2', 'slime3', 'slime4', 'slime5'
+        ], 8);
+        this.direction = 1;
+        this.vx = CONFIG.ENEMY_SPEED;
+        this.patrolDistance = 100;
+        this.startX = x;
+        this.active = true;
+    }
+
+    update(deltaTime, tilemap) {
+        if (!this.active) return;
+
+        this.animation.update(deltaTime);
+
+        // Mouvement de patrouille
+        this.x += this.vx;
+
+        if (Math.abs(this.x - this.startX) > this.patrolDistance) {
+            this.direction *= -1;
+            this.vx *= -1;
+        }
+
+        // Gravité
+        this.vy += CONFIG.GRAVITY;
+        this.y += this.vy;
+
+        // Collision avec le sol
+        const bounds = this.getBounds();
+        const tiles = tilemap.getTilesInBounds(bounds);
+
+        for (const tile of tiles) {
+            if (tile.solid) {
+                const tileBounds = {
+                    left: tile.x * CONFIG.TILE_SIZE,
+                    right: (tile.x + 1) * CONFIG.TILE_SIZE,
+                    top: tile.y * CONFIG.TILE_SIZE,
+                    bottom: (tile.y + 1) * CONFIG.TILE_SIZE
+                };
+
+                if (bounds.left < tileBounds.right && bounds.right > tileBounds.left &&
+                    bounds.top < tileBounds.bottom && bounds.bottom > tileBounds.top) {
+
+                    if (this.vy > 0) {
+                        this.y = tileBounds.top - this.height;
+                        this.vy = 0;
+                    }
+                }
+            }
+        }
+    }
+
+    draw(ctx) {
+        if (!this.active) return;
+
+        const frame = this.animation.getCurrentFrame();
+        const img = this.resourceManager.get(frame);
+
+        if (img) {
+            ctx.save();
+            if (this.direction === -1) {
+                ctx.scale(-1, 1);
+                ctx.drawImage(img, -this.x - this.width, this.y, this.width, this.height);
+            } else {
+                ctx.drawImage(img, this.x, this.y, this.width, this.height);
+            }
+            ctx.restore();
+        }
+    }
+}
+
+// Classe Tilemap
+class Tilemap {
+    constructor(width, height) {
+        this.width = width;
+        this.height = height;
+        this.tiles = this.generateMap();
+    }
+
+    generateMap() {
+        const map = [];
+
+        // Génération d'un niveau simple
+        for (let y = 0; y < this.height; y++) {
+            map[y] = [];
+            for (let x = 0; x < this.width; x++) {
+                // Sol
+                if (y >= 15) {
+                    map[y][x] = { type: 1, solid: true };
+                }
+                // Plateformes
+                else if (y === 12 && x >= 5 && x <= 8) {
+                    map[y][x] = { type: 1, solid: true };
+                }
+                else if (y === 10 && x >= 12 && x <= 15) {
+                    map[y][x] = { type: 1, solid: true };
+                }
+                else if (y === 8 && x >= 18 && x <= 21) {
+                    map[y][x] = { type: 1, solid: true };
+                }
+                // Vide
+                else {
+                    map[y][x] = { type: 0, solid: false };
+                }
+            }
+        }
+
+        return map;
+    }
+
+    getTile(x, y) {
+        if (x < 0 || x >= this.width || y < 0 || y >= this.height) {
+            return { type: 0, solid: false };
+        }
+        return { ...this.tiles[y][x], x, y };
+    }
+
+    getTilesInBounds(bounds) {
+        const tiles = [];
+        const startX = Math.floor(bounds.left / CONFIG.TILE_SIZE);
+        const endX = Math.floor(bounds.right / CONFIG.TILE_SIZE);
+        const startY = Math.floor(bounds.top / CONFIG.TILE_SIZE);
+        const endY = Math.floor(bounds.bottom / CONFIG.TILE_SIZE);
+
+        for (let y = startY; y <= endY; y++) {
+            for (let x = startX; x <= endX; x++) {
+                const tile = this.getTile(x, y);
+                if (tile.solid) {
+                    tiles.push(tile);
+                }
+            }
+        }
+
+        return tiles;
+    }
+
+    draw(ctx, resourceManager) {
+        for (let y = 0; y < this.height; y++) {
+            for (let x = 0; x < this.width; x++) {
+                const tile = this.tiles[y][x];
+                const px = x * CONFIG.TILE_SIZE;
+                const py = y * CONFIG.TILE_SIZE;
+
+                if (tile.type === 1) {
+                    // Dessiner la tuile de terrain
+                    const tileset = resourceManager.get('tileset');
+                    if (tileset) {
+                        // Utiliser différentes tuiles selon la position
+                        const tileX = (x % 4) * 16;
+                        const tileY = (y % 4) * 16;
+                        ctx.drawImage(
+                            tileset,
+                            tileX, tileY, 16, 16,
+                            px, py, CONFIG.TILE_SIZE, CONFIG.TILE_SIZE
+                        );
+                    } else {
+                        ctx.fillStyle = '#8B4513';
+                        ctx.fillRect(px, py, CONFIG.TILE_SIZE, CONFIG.TILE_SIZE);
+                        ctx.strokeStyle = '#654321';
+                        ctx.strokeRect(px, py, CONFIG.TILE_SIZE, CONFIG.TILE_SIZE);
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Classe principale du jeu
+class Game {
+    constructor() {
+        this.canvas = document.getElementById('gameCanvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.resourceManager = new ResourceManager();
+
+        this.keys = {};
+        this.score = 0;
+        this.lives = 3;
+        this.gameOver = false;
+
+        this.lastTime = 0;
+
+        this.setupControls();
+    }
+
+    setupControls() {
+        window.addEventListener('keydown', (e) => {
+            this.keys[e.key] = true;
+            if (e.key === ' ') e.preventDefault();
+            if (e.key === 'r' || e.key === 'R') {
+                this.reset();
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            this.keys[e.key] = false;
+        });
+    }
+
+    async init() {
+        console.log('Chargement des ressources...');
+        await this.resourceManager.loadAll();
+        console.log('Ressources chargées!');
+
+        this.reset();
+        this.start();
+    }
+
+    reset() {
+        this.tilemap = new Tilemap(CONFIG.MAP_WIDTH, CONFIG.MAP_HEIGHT);
+        this.player = new Player(100, 100);
+        this.enemies = [
+            new Slime(200, 400, this.resourceManager),
+            new Slime(400, 300, this.resourceManager),
+            new Slime(600, 250, this.resourceManager)
+        ];
+        this.score = 0;
+        this.lives = 3;
+        this.gameOver = false;
+        this.updateUI();
+    }
+
+    start() {
+        this.lastTime = performance.now();
+        this.gameLoop();
+    }
+
+    gameLoop(currentTime = 0) {
+        const deltaTime = currentTime - this.lastTime;
+        this.lastTime = currentTime;
+
+        this.update(deltaTime);
+        this.draw();
+
+        requestAnimationFrame((time) => this.gameLoop(time));
+    }
+
+    update(deltaTime) {
+        if (this.gameOver) return;
+
+        // Mise à jour du joueur
+        this.player.update(this.keys, this.tilemap);
+
+        // Mise à jour des ennemis
+        for (const enemy of this.enemies) {
+            enemy.update(deltaTime, this.tilemap);
+
+            // Collision joueur-ennemi
+            if (enemy.active && this.player.collidesWith(enemy)) {
+                // Si le joueur tombe sur l'ennemi
+                if (this.player.vy > 0 && this.player.y < enemy.y) {
+                    enemy.active = false;
+                    this.player.vy = CONFIG.JUMP_FORCE * 0.5;
+                    this.score += 100;
+                    this.updateUI();
+                } else {
+                    // Le joueur est touché
+                    this.lives--;
+                    this.updateUI();
+                    if (this.lives <= 0) {
+                        this.gameOver = true;
+                    } else {
+                        // Réapparition
+                        this.player.x = 100;
+                        this.player.y = 100;
+                        this.player.vx = 0;
+                        this.player.vy = 0;
+                    }
+                }
+            }
+        }
+
+        // Vérifier si le joueur tombe hors de l'écran
+        if (this.player.y > this.canvas.height) {
+            this.lives--;
+            this.updateUI();
+            if (this.lives <= 0) {
+                this.gameOver = true;
+            } else {
+                this.player.x = 100;
+                this.player.y = 100;
+                this.player.vx = 0;
+                this.player.vy = 0;
+            }
+        }
+    }
+
+    draw() {
+        // Fond
+        this.ctx.fillStyle = '#87CEEB';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Tilemap
+        this.tilemap.draw(this.ctx, this.resourceManager);
+
+        // Ennemis
+        for (const enemy of this.enemies) {
+            enemy.draw(this.ctx);
+        }
+
+        // Joueur
+        this.player.draw(this.ctx);
+
+        // Game Over
+        if (this.gameOver) {
+            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+            this.ctx.fillStyle = 'white';
+            this.ctx.font = '48px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText('GAME OVER', this.canvas.width / 2, this.canvas.height / 2);
+            this.ctx.font = '24px Arial';
+            this.ctx.fillText('Appuyez sur R pour recommencer', this.canvas.width / 2, this.canvas.height / 2 + 50);
+            this.ctx.fillText('Score: ' + this.score, this.canvas.width / 2, this.canvas.height / 2 + 90);
+        }
+    }
+
+    updateUI() {
+        document.getElementById('score').textContent = this.score;
+        document.getElementById('lives').textContent = this.lives;
+    }
+}
+
+// Démarrage du jeu
+const game = new Game();
+game.init();
