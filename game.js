@@ -40,7 +40,10 @@ class ResourceManager {
             { name: 'slime2', path: 'Tileset/slime/slime_f2.png' },
             { name: 'slime3', path: 'Tileset/slime/slime_f3.png' },
             { name: 'slime4', path: 'Tileset/slime/slime_f4.png' },
-            { name: 'slime5', path: 'Tileset/slime/slime_f5.png' }
+            { name: 'slime5', path: 'Tileset/slime/slime_f5.png' },
+            { name: 'warriorRun', path: 'Tileset/warrior/warrior run.png' },
+            { name: 'warriorRoll', path: 'Tileset/warrior/warrior rolling.png' },
+            { name: 'warriorDeath', path: 'Tileset/warrior/warrior death.png' }
         ];
 
         await Promise.all(resources.map(r => this.loadImage(r.name, r.path)));
@@ -109,23 +112,37 @@ class Entity {
 
 // Classe joueur
 class Player extends Entity {
-    constructor(x, y) {
-        super(x, y, 24, 24);
-        this.color = '#4CAF50';
+    constructor(x, y, resourceManager) {
+        super(x, y, 32, 32);
+        this.resourceManager = resourceManager;
         this.jumpPressed = false;
         this.facing = 1; // 1 = droite, -1 = gauche
+
+        // Animations
+        this.currentAnimation = 'idle';
+        this.animationFrame = 0;
+        this.animationTimer = 0;
+        this.animationSpeed = 100; // ms par frame
+
+        // Sprite sheet info (warrior run: 8 frames, 4 par ligne)
+        this.spriteWidth = 16;
+        this.spriteHeight = 16;
     }
 
-    update(keys, tilemap) {
+    update(keys, tilemap, deltaTime) {
         // Déplacement horizontal
         this.vx = 0;
+        let isMoving = false;
+
         if (keys['ArrowLeft']) {
             this.vx = -CONFIG.PLAYER_SPEED;
             this.facing = -1;
+            isMoving = true;
         }
         if (keys['ArrowRight']) {
             this.vx = CONFIG.PLAYER_SPEED;
             this.facing = 1;
+            isMoving = true;
         }
 
         // Saut
@@ -149,6 +166,17 @@ class Player extends Entity {
 
         this.y += this.vy;
         this.handleCollisionY(tilemap);
+
+        // Mise à jour de l'animation
+        if (isMoving && this.onGround) {
+            this.currentAnimation = 'run';
+        } else if (!this.onGround) {
+            this.currentAnimation = 'roll';
+        } else {
+            this.currentAnimation = 'idle';
+        }
+
+        this.updateAnimation(deltaTime);
     }
 
     handleCollisionX(tilemap) {
@@ -207,16 +235,74 @@ class Player extends Entity {
         }
     }
 
-    draw(ctx) {
-        ctx.fillStyle = this.color;
-        ctx.fillRect(this.x, this.y, this.width, this.height);
+    updateAnimation(deltaTime) {
+        this.animationTimer += deltaTime;
 
-        // Yeux simples
-        ctx.fillStyle = 'white';
-        const eyeOffset = this.facing === 1 ? 14 : 6;
-        ctx.fillRect(this.x + eyeOffset, this.y + 8, 4, 4);
-        ctx.fillStyle = 'black';
-        ctx.fillRect(this.x + eyeOffset + 1, this.y + 9, 2, 2);
+        let maxFrames = 8; // run animation
+        if (this.currentAnimation === 'roll') {
+            maxFrames = 6;
+        } else if (this.currentAnimation === 'idle') {
+            maxFrames = 4; // utilise les 4 premières frames de run pour idle
+        }
+
+        if (this.animationTimer >= this.animationSpeed) {
+            this.animationFrame = (this.animationFrame + 1) % maxFrames;
+            this.animationTimer = 0;
+        }
+    }
+
+    draw(ctx) {
+        let spriteSheet = this.resourceManager.get('warriorRun');
+        let frameX = this.animationFrame % 4; // 4 frames par ligne
+        let frameY = Math.floor(this.animationFrame / 4);
+
+        if (this.currentAnimation === 'roll') {
+            spriteSheet = this.resourceManager.get('warriorRoll');
+            frameX = this.animationFrame % 3; // 3 frames par ligne
+            frameY = Math.floor(this.animationFrame / 3);
+        } else if (this.currentAnimation === 'idle') {
+            spriteSheet = this.resourceManager.get('warriorRun');
+            frameX = 0;
+            frameY = 0;
+        }
+
+        if (spriteSheet) {
+            ctx.save();
+
+            // Flip horizontal si on regarde à gauche
+            if (this.facing === -1) {
+                ctx.scale(-1, 1);
+                ctx.drawImage(
+                    spriteSheet,
+                    frameX * this.spriteWidth,
+                    frameY * this.spriteHeight,
+                    this.spriteWidth,
+                    this.spriteHeight,
+                    -this.x - this.width,
+                    this.y,
+                    this.width,
+                    this.height
+                );
+            } else {
+                ctx.drawImage(
+                    spriteSheet,
+                    frameX * this.spriteWidth,
+                    frameY * this.spriteHeight,
+                    this.spriteWidth,
+                    this.spriteHeight,
+                    this.x,
+                    this.y,
+                    this.width,
+                    this.height
+                );
+            }
+
+            ctx.restore();
+        } else {
+            // Fallback si le sprite n'est pas chargé
+            ctx.fillStyle = '#4CAF50';
+            ctx.fillRect(this.x, this.y, this.width, this.height);
+        }
     }
 }
 
@@ -538,7 +624,7 @@ class Game {
 
     reset() {
         this.tilemap = new Tilemap(CONFIG.MAP_WIDTH, CONFIG.MAP_HEIGHT);
-        this.player = new Player(100, 100);
+        this.player = new Player(100, 100, this.resourceManager);
         this.enemies = [
             new Slime(200, 400, this.resourceManager),
             new Slime(400, 300, this.resourceManager),
@@ -569,7 +655,7 @@ class Game {
         if (this.gameOver) return;
 
         // Mise à jour du joueur
-        this.player.update(this.keys, this.tilemap);
+        this.player.update(this.keys, this.tilemap, deltaTime);
 
         // Mise à jour des ennemis
         for (const enemy of this.enemies) {
@@ -637,10 +723,10 @@ class Game {
             this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
             this.ctx.fillStyle = 'white';
-            this.ctx.font = '48px Arial';
+            this.ctx.font = '48px PixelStorm, Arial';
             this.ctx.textAlign = 'center';
             this.ctx.fillText('GAME OVER', this.canvas.width / 2, this.canvas.height / 2);
-            this.ctx.font = '24px Arial';
+            this.ctx.font = '24px PixelStorm, Arial';
             this.ctx.fillText('Appuyez sur R pour recommencer', this.canvas.width / 2, this.canvas.height / 2 + 50);
             this.ctx.fillText('Score: ' + this.score, this.canvas.width / 2, this.canvas.height / 2 + 90);
         }
