@@ -6,8 +6,8 @@ const CONFIG = {
     JUMP_FORCE: -12,
     PLAYER_SPEED: 4,
     ENEMY_SPEED: 1,
-    MAP_WIDTH: 25,
-    MAP_HEIGHT: 19
+    MAP_WIDTH: 30,  // Plus large pour exploration
+    MAP_HEIGHT: 22  // Plus haut pour design vertical
 };
 
 // Gestionnaire de ressources
@@ -406,71 +406,170 @@ class Tilemap {
     generateMap() {
         const map = [];
 
-        // Génération d'un niveau simple
+        // Initialiser avec du vide
         for (let y = 0; y < this.height; y++) {
             map[y] = [];
             for (let x = 0; x < this.width; x++) {
-                // Sol principal
-                if (y >= 15) {
-                    map[y][x] = { type: 1, solid: true };
-                }
-                // Plateformes
-                else if (y === 12 && x >= 5 && x <= 8) {
-                    map[y][x] = { type: 1, solid: true };
-                }
-                else if (y === 10 && x >= 12 && x <= 15) {
-                    map[y][x] = { type: 1, solid: true };
-                }
-                else if (y === 8 && x >= 18 && x <= 21) {
-                    map[y][x] = { type: 1, solid: true };
-                }
-                // Vide
-                else {
-                    map[y][x] = { type: 0, solid: false };
-                }
+                map[y][x] = { type: 0, solid: false };
             }
+        }
+
+        // Créer un niveau organique de type grotte
+        // Sol principal avec contours irréguliers
+        for (let x = 0; x < this.width; x++) {
+            const baseHeight = 15;
+            const variation = Math.sin(x * 0.5) * 2 + Math.cos(x * 0.3) * 1.5;
+            const groundLevel = Math.floor(baseHeight + variation);
+
+            for (let y = groundLevel; y < this.height; y++) {
+                map[y][x] = { type: 1, solid: true };
+            }
+        }
+
+        // Creuser des cavités organiques dans le sol
+        this.carveCavity(map, 5, 16, 4, 2);
+        this.carveCavity(map, 15, 16, 5, 2);
+
+        // Plateformes organiques de différentes tailles
+        this.createOrganicPlatform(map, 3, 13, 5, 1);
+        this.createOrganicPlatform(map, 10, 11, 6, 1);
+        this.createOrganicPlatform(map, 18, 9, 4, 1);
+
+        // Plateforme plus épaisse
+        this.createOrganicPlatform(map, 7, 7, 4, 2);
+
+        // Colonne/pilier de grotte
+        this.createPillar(map, 13, 5, 8);
+
+        // Petites plateformes suspendues
+        this.createOrganicPlatform(map, 1, 10, 2, 1);
+        this.createOrganicPlatform(map, 22, 12, 2, 1);
+
+        // Escalier naturel
+        for (let i = 0; i < 4; i++) {
+            this.createOrganicPlatform(map, 19 + i, 14 - i, 2, 1);
         }
 
         return map;
     }
 
+    // Créer une plateforme avec bords irréguliers
+    createOrganicPlatform(map, startX, startY, width, height) {
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                const px = startX + x;
+                const py = startY + y;
+
+                if (px >= 0 && px < this.width && py >= 0 && py < this.height) {
+                    // Ajouter de la variation aux bords
+                    if (x === 0 || x === width - 1) {
+                        // 20% de chance d'omettre un bord pour un aspect organique
+                        if (Math.random() > 0.2) {
+                            map[py][px] = { type: 1, solid: true };
+                        }
+                    } else {
+                        map[py][px] = { type: 1, solid: true };
+                    }
+                }
+            }
+        }
+    }
+
+    // Créer un pilier vertical
+    createPillar(map, x, startY, height) {
+        for (let y = 0; y < height; y++) {
+            const py = startY + y;
+            if (x >= 0 && x < this.width && py >= 0 && py < this.height) {
+                map[py][x] = { type: 1, solid: true };
+                // Ajouter de la largeur variée
+                if (Math.random() > 0.3 && x + 1 < this.width) {
+                    map[py][x + 1] = { type: 1, solid: true };
+                }
+            }
+        }
+    }
+
+    // Creuser une cavité dans le terrain
+    carveCavity(map, centerX, centerY, width, height) {
+        for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+                const px = centerX + x - Math.floor(width / 2);
+                const py = centerY + y - Math.floor(height / 2);
+
+                if (px >= 0 && px < this.width && py >= 0 && py < this.height) {
+                    map[py][px] = { type: 0, solid: false };
+                }
+            }
+        }
+    }
+
     generateDecorations() {
         const decorations = [];
 
-        // Ajouter des plantes sur le sol
-        const flowerPositions = [2, 7, 11, 16, 20, 23];
-        for (const x of flowerPositions) {
-            decorations.push({
-                x: x,
-                y: 14,
-                type: 'flower',
-                spriteX: Math.floor(Math.random() * 3) * 16,
-                spriteY: 32
-            });
+        // Stalactites sur le plafond (partie haute)
+        for (let x = 0; x < this.width; x++) {
+            // Stalactites aléatoires avec variation
+            if (Math.random() > 0.7) {
+                const variant = Math.floor(Math.random() * 4);
+                decorations.push({
+                    x: x,
+                    y: 0,
+                    type: 'stalactite',
+                    spriteX: variant * 16,
+                    spriteY: 0,
+                    layer: 'foreground'
+                });
+            }
         }
 
-        // Ajouter des champignons
-        const mushroomPositions = [4, 14, 19];
-        for (const x of mushroomPositions) {
-            decorations.push({
-                x: x,
-                y: 14,
-                type: 'mushroom',
-                spriteX: 48,
-                spriteY: 32
-            });
-        }
+        // Plantes et champignons sur les surfaces
+        for (let x = 0; x < this.width; x++) {
+            for (let y = 1; y < this.height - 1; y++) {
+                const tile = this.tiles[y][x];
+                const tileAbove = this.tiles[y - 1][x];
 
-        // Ajouter quelques stalactites en haut
-        const stalactitePositions = [3, 8, 13, 17, 22];
-        for (const x of stalactitePositions) {
-            decorations.push({
-                x: x,
-                y: 0,
-                type: 'stalactite',
-                spriteX: Math.floor(Math.random() * 4) * 16,
-                spriteY: 0
-            });
+                // Si c'est un sol avec de l'air au-dessus
+                if (tile.solid && !tileAbove.solid) {
+                    // 15% de chance d'ajouter une décoration
+                    const rand = Math.random();
+                    if (rand > 0.85) {
+                        // Fleur
+                        decorations.push({
+                            x: x,
+                            y: y - 1,
+                            type: 'flower',
+                            spriteX: Math.floor(Math.random() * 3) * 16,
+                            spriteY: 32,
+                            layer: 'foreground'
+                        });
+                    } else if (rand > 0.80) {
+                        // Champignon
+                        decorations.push({
+                            x: x,
+                            y: y - 1,
+                            type: 'mushroom',
+                            spriteX: 48,
+                            spriteY: 32,
+                            layer: 'foreground'
+                        });
+                    }
+                }
+
+                // Stalagmites sur le sol
+                const tileBelow = this.tiles[y + 1]?.[x];
+                if (tile.solid && tileBelow && !tileBelow.solid && y > 10) {
+                    if (Math.random() > 0.92) {
+                        decorations.push({
+                            x: x,
+                            y: y + 1,
+                            type: 'stalagmite',
+                            spriteX: Math.floor(Math.random() * 4) * 16,
+                            spriteY: 16,
+                            layer: 'foreground'
+                        });
+                    }
+                }
+            }
         }
 
         return decorations;
@@ -502,98 +601,131 @@ class Tilemap {
         return tiles;
     }
 
-    // Détermine quel type de tuile utiliser selon les voisins
+    // Détermine quel type de tuile utiliser selon les voisins (bitmasking avancé)
     getAutoTileIndex(x, y) {
         const hasTop = this.getTile(x, y - 1).solid;
         const hasBottom = this.getTile(x, y + 1).solid;
         const hasLeft = this.getTile(x - 1, y).solid;
         const hasRight = this.getTile(x + 1, y).solid;
 
-        // Tuile pleine (entourée)
+        // Coins diagonaux pour un rendu plus naturel
+        const hasTopLeft = this.getTile(x - 1, y - 1).solid;
+        const hasTopRight = this.getTile(x + 1, y - 1).solid;
+        const hasBottomLeft = this.getTile(x - 1, y + 1).solid;
+        const hasBottomRight = this.getTile(x + 1, y + 1).solid;
+
+        // Variation aléatoire pour éviter la répétition
+        const seed = (x * 7 + y * 13) % 3;
+        const variation = seed * 16; // Offset horizontal pour les variations
+
+        // Tuile pleine (entourée) - utiliser le centre avec variations
         if (hasTop && hasBottom && hasLeft && hasRight) {
-            return { sx: 1, sy: 1 }; // Centre
-        }
-        // Surface supérieure
-        else if (!hasTop && hasBottom) {
-            if (!hasLeft && hasRight) return { sx: 0, sy: 0 }; // Coin supérieur gauche
-            else if (hasLeft && !hasRight) return { sx: 2, sy: 0 }; // Coin supérieur droit
-            else if (hasLeft && hasRight) return { sx: 1, sy: 0 }; // Bord supérieur
-            else return { sx: 0, sy: 0 }; // Tuile isolée
-        }
-        // Surface inférieure
-        else if (hasTop && !hasBottom) {
-            if (!hasLeft && hasRight) return { sx: 0, sy: 2 }; // Coin inférieur gauche
-            else if (hasLeft && !hasRight) return { sx: 2, sy: 2 }; // Coin inférieur droit
-            else if (hasLeft && hasRight) return { sx: 1, sy: 2 }; // Bord inférieur
-            else return { sx: 1, sy: 2 };
-        }
-        // Bord gauche
-        else if (!hasLeft && hasRight && hasTop && hasBottom) {
-            return { sx: 0, sy: 1 };
-        }
-        // Bord droit
-        else if (hasLeft && !hasRight && hasTop && hasBottom) {
-            return { sx: 2, sy: 1 };
-        }
-        // Tuile seule (plateforme)
-        else if (!hasTop && !hasBottom) {
-            if (!hasLeft && hasRight) return { sx: 0, sy: 0 };
-            else if (hasLeft && !hasRight) return { sx: 2, sy: 0 };
-            else if (hasLeft && hasRight) return { sx: 1, sy: 0 };
-            else return { sx: 3, sy: 0 }; // Tuile unique
+            // Variation du centre pour briser la répétition
+            return { sx: 1, sy: 1, variant: seed };
         }
 
-        return { sx: 1, sy: 1 }; // Défaut
+        // Surface supérieure (le haut de la plateforme)
+        if (!hasTop && hasBottom) {
+            if (!hasLeft && hasRight) return { sx: 0, sy: 0 }; // Coin sup gauche
+            else if (hasLeft && !hasRight) return { sx: 2, sy: 0 }; // Coin sup droit
+            else if (hasLeft && hasRight) return { sx: 1, sy: 0 }; // Bord sup
+            else return { sx: 1, sy: 0 }; // Plateforme isolée
+        }
+
+        // Surface inférieure (dessous de plateforme)
+        if (hasTop && !hasBottom) {
+            if (!hasLeft && hasRight) return { sx: 0, sy: 2 }; // Coin inf gauche
+            else if (hasLeft && !hasRight) return { sx: 2, sy: 2 }; // Coin inf droit
+            else if (hasLeft && hasRight) return { sx: 1, sy: 2 }; // Bord inf
+            else return { sx: 1, sy: 2 };
+        }
+
+        // Bords verticaux
+        if (!hasLeft && hasRight && hasTop && hasBottom) return { sx: 0, sy: 1 }; // Bord gauche
+        if (hasLeft && !hasRight && hasTop && hasBottom) return { sx: 2, sy: 1 }; // Bord droit
+
+        // Plateforme fine (1 tuile de haut)
+        if (!hasTop && !hasBottom) {
+            if (!hasLeft && !hasRight) return { sx: 1, sy: 0 }; // Tuile unique
+            if (!hasLeft && hasRight) return { sx: 0, sy: 0 }; // Bout gauche
+            if (hasLeft && !hasRight) return { sx: 2, sy: 0 }; // Bout droit
+            return { sx: 1, sy: 0 }; // Milieu
+        }
+
+        // Coins intérieurs pour un rendu plus détaillé
+        if (hasTop && hasBottom && hasLeft && hasRight) {
+            if (!hasTopLeft) return { sx: 0, sy: 1 };
+            if (!hasTopRight) return { sx: 2, sy: 1 };
+            if (!hasBottomLeft) return { sx: 0, sy: 1 };
+            if (!hasBottomRight) return { sx: 2, sy: 1 };
+        }
+
+        return { sx: 1, sy: 1, variant: seed }; // Défaut avec variation
     }
 
     draw(ctx, resourceManager) {
         const tileset = resourceManager.get('tileset');
         const vegetation = resourceManager.get('vegetation');
 
-        // Dessiner le background avec les tuiles sombres (partie haute du tileset)
+        // Dessiner le background avec les tuiles sombres et variations
         for (let y = 0; y < this.height; y++) {
             for (let x = 0; x < this.width; x++) {
                 const px = x * CONFIG.TILE_SIZE;
                 const py = y * CONFIG.TILE_SIZE;
 
-                // Utiliser la partie sombre du tileset pour le background
                 if (tileset) {
-                    const bgX = (x % 3) * 16;
-                    const bgY = (y % 3) * 16;
+                    // Utiliser plusieurs variantes du background pour éviter la répétition
+                    const bgVariant = ((x * 3 + y * 5) % 9);
+                    const bgX = (bgVariant % 3) * 16;
+                    const bgY = Math.floor(bgVariant / 3) * 16;
+
                     ctx.drawImage(
                         tileset,
                         bgX, bgY, 16, 16,
                         px, py, CONFIG.TILE_SIZE, CONFIG.TILE_SIZE
                     );
+
+                    // Ajouter un léger gradient sombre pour la profondeur
+                    const depth = y / this.height;
+                    ctx.fillStyle = `rgba(0, 0, 20, ${depth * 0.3})`;
+                    ctx.fillRect(px, py, CONFIG.TILE_SIZE, CONFIG.TILE_SIZE);
                 }
             }
         }
 
-        // Dessiner les tuiles de terrain (partie claire du tileset - bas à droite)
+        // Dessiner les tuiles de terrain avec auto-tiling
         for (let y = 0; y < this.height; y++) {
             for (let x = 0; x < this.width; x++) {
                 const tile = this.tiles[y][x];
                 const px = x * CONFIG.TILE_SIZE;
                 const py = y * CONFIG.TILE_SIZE;
 
-                if (tile.type === 1) {
-                    if (tileset) {
-                        const autoTile = this.getAutoTileIndex(x, y);
-                        // Utiliser la partie claire (bas à droite) pour les plateformes
-                        // Offset de 48 pixels vers la droite et 32 pixels vers le bas
-                        const tileX = 48 + (autoTile.sx * 16);
-                        const tileY = 32 + (autoTile.sy * 16);
+                if (tile.type === 1 && tileset) {
+                    const autoTile = this.getAutoTileIndex(x, y);
 
-                        ctx.drawImage(
-                            tileset,
-                            tileX, tileY, 16, 16,
-                            px, py, CONFIG.TILE_SIZE, CONFIG.TILE_SIZE
-                        );
-                    } else {
-                        ctx.fillStyle = '#8B4513';
-                        ctx.fillRect(px, py, CONFIG.TILE_SIZE, CONFIG.TILE_SIZE);
-                        ctx.strokeStyle = '#654321';
-                        ctx.strokeRect(px, py, CONFIG.TILE_SIZE, CONFIG.TILE_SIZE);
+                    // Utiliser la partie claire pour les plateformes
+                    const tileX = 48 + (autoTile.sx * 16);
+                    const tileY = 32 + (autoTile.sy * 16);
+
+                    ctx.drawImage(
+                        tileset,
+                        tileX, tileY, 16, 16,
+                        px, py, CONFIG.TILE_SIZE, CONFIG.TILE_SIZE
+                    );
+
+                    // Ajouter un léger effet d'ombre sur les bords
+                    const hasTop = this.getTile(x, y - 1).solid;
+                    if (!hasTop) {
+                        // Highlight sur le dessus des plateformes
+                        ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+                        ctx.fillRect(px, py, CONFIG.TILE_SIZE, 2);
+                    }
+
+                    const hasBottom = this.getTile(x, y + 1).solid;
+                    if (!hasBottom) {
+                        // Ombre sous les plateformes
+                        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+                        ctx.fillRect(px, py + CONFIG.TILE_SIZE - 3, CONFIG.TILE_SIZE, 3);
                     }
                 }
             }
@@ -657,11 +789,13 @@ class Game {
 
     reset() {
         this.tilemap = new Tilemap(CONFIG.MAP_WIDTH, CONFIG.MAP_HEIGHT);
-        this.player = new Player(100, 100, this.resourceManager);
+        // Position du joueur sur une plateforme sûre
+        this.player = new Player(120, 380, this.resourceManager);
         this.enemies = [
-            new Slime(200, 400, this.resourceManager),
-            new Slime(400, 300, this.resourceManager),
-            new Slime(600, 250, this.resourceManager)
+            new Slime(140, 400, this.resourceManager),
+            new Slime(350, 320, this.resourceManager),
+            new Slime(580, 280, this.resourceManager),
+            new Slime(220, 200, this.resourceManager)
         ];
         this.score = 0;
         this.lives = 3;
@@ -709,9 +843,9 @@ class Game {
                     if (this.lives <= 0) {
                         this.gameOver = true;
                     } else {
-                        // Réapparition
-                        this.player.x = 100;
-                        this.player.y = 100;
+                        // Réapparition au point de départ
+                        this.player.x = 120;
+                        this.player.y = 380;
                         this.player.vx = 0;
                         this.player.vy = 0;
                     }
@@ -726,8 +860,9 @@ class Game {
             if (this.lives <= 0) {
                 this.gameOver = true;
             } else {
-                this.player.x = 100;
-                this.player.y = 100;
+                // Réapparition au point de départ
+                this.player.x = 120;
+                this.player.y = 380;
                 this.player.vx = 0;
                 this.player.vy = 0;
             }
