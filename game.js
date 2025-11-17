@@ -113,7 +113,7 @@ class Entity {
 // Classe joueur
 class Player extends Entity {
     constructor(x, y, resourceManager) {
-        super(x, y, 32, 32);
+        super(x, y, 28, 28);
         this.resourceManager = resourceManager;
         this.jumpPressed = false;
         this.facing = 1; // 1 = droite, -1 = gauche
@@ -122,11 +122,13 @@ class Player extends Entity {
         this.currentAnimation = 'idle';
         this.animationFrame = 0;
         this.animationTimer = 0;
-        this.animationSpeed = 100; // ms par frame
+        this.animationSpeed = 120; // ms par frame
 
-        // Sprite sheet info (warrior run: 8 frames, 4 par ligne)
+        // Sprite sheet info
         this.spriteWidth = 16;
         this.spriteHeight = 16;
+        this.displayWidth = 40;  // Taille d'affichage plus grande
+        this.displayHeight = 40;
     }
 
     update(keys, tilemap, deltaTime) {
@@ -258,8 +260,8 @@ class Player extends Entity {
 
         if (this.currentAnimation === 'roll') {
             spriteSheet = this.resourceManager.get('warriorRoll');
-            frameX = this.animationFrame % 3; // 3 frames par ligne
-            frameY = Math.floor(this.animationFrame / 3);
+            frameX = this.animationFrame % 2; // 2 frames par ligne pour rolling
+            frameY = Math.floor(this.animationFrame / 2);
         } else if (this.currentAnimation === 'idle') {
             spriteSheet = this.resourceManager.get('warriorRun');
             frameX = 0;
@@ -268,6 +270,12 @@ class Player extends Entity {
 
         if (spriteSheet) {
             ctx.save();
+
+            // Calculer la position centrée pour que le sprite soit centré sur la hitbox
+            const offsetX = (this.displayWidth - this.width) / 2;
+            const offsetY = (this.displayHeight - this.height) / 2;
+            const drawX = this.x - offsetX;
+            const drawY = this.y - offsetY;
 
             // Flip horizontal si on regarde à gauche
             if (this.facing === -1) {
@@ -278,10 +286,10 @@ class Player extends Entity {
                     frameY * this.spriteHeight,
                     this.spriteWidth,
                     this.spriteHeight,
-                    -this.x - this.width,
-                    this.y,
-                    this.width,
-                    this.height
+                    -(drawX + this.displayWidth),
+                    drawY,
+                    this.displayWidth,
+                    this.displayHeight
                 );
             } else {
                 ctx.drawImage(
@@ -290,14 +298,18 @@ class Player extends Entity {
                     frameY * this.spriteHeight,
                     this.spriteWidth,
                     this.spriteHeight,
-                    this.x,
-                    this.y,
-                    this.width,
-                    this.height
+                    drawX,
+                    drawY,
+                    this.displayWidth,
+                    this.displayHeight
                 );
             }
 
             ctx.restore();
+
+            // DEBUG: Afficher la hitbox (à commenter en production)
+            // ctx.strokeStyle = 'red';
+            // ctx.strokeRect(this.x, this.y, this.width, this.height);
         } else {
             // Fallback si le sprite n'est pas chargé
             ctx.fillStyle = '#4CAF50';
@@ -538,7 +550,26 @@ class Tilemap {
         const tileset = resourceManager.get('tileset');
         const vegetation = resourceManager.get('vegetation');
 
-        // Dessiner les tuiles de terrain
+        // Dessiner le background avec les tuiles sombres (partie haute du tileset)
+        for (let y = 0; y < this.height; y++) {
+            for (let x = 0; x < this.width; x++) {
+                const px = x * CONFIG.TILE_SIZE;
+                const py = y * CONFIG.TILE_SIZE;
+
+                // Utiliser la partie sombre du tileset pour le background
+                if (tileset) {
+                    const bgX = (x % 3) * 16;
+                    const bgY = (y % 3) * 16;
+                    ctx.drawImage(
+                        tileset,
+                        bgX, bgY, 16, 16,
+                        px, py, CONFIG.TILE_SIZE, CONFIG.TILE_SIZE
+                    );
+                }
+            }
+        }
+
+        // Dessiner les tuiles de terrain (partie claire du tileset - bas à droite)
         for (let y = 0; y < this.height; y++) {
             for (let x = 0; x < this.width; x++) {
                 const tile = this.tiles[y][x];
@@ -548,8 +579,10 @@ class Tilemap {
                 if (tile.type === 1) {
                     if (tileset) {
                         const autoTile = this.getAutoTileIndex(x, y);
-                        const tileX = autoTile.sx * 16;
-                        const tileY = autoTile.sy * 16;
+                        // Utiliser la partie claire (bas à droite) pour les plateformes
+                        // Offset de 48 pixels vers la droite et 32 pixels vers le bas
+                        const tileX = 48 + (autoTile.sx * 16);
+                        const tileY = 32 + (autoTile.sy * 16);
 
                         ctx.drawImage(
                             tileset,
@@ -702,11 +735,7 @@ class Game {
     }
 
     draw() {
-        // Fond
-        this.ctx.fillStyle = '#87CEEB';
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-
-        // Tilemap
+        // Le tilemap gère maintenant le fond complet
         this.tilemap.draw(this.ctx, this.resourceManager);
 
         // Ennemis
