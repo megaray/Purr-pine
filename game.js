@@ -43,7 +43,21 @@ class ResourceManager {
             { name: 'slime5', path: 'Tileset/slime/slime_f5.png' },
             { name: 'warriorRun', path: 'Tileset/warrior/warrior run.png' },
             { name: 'warriorRoll', path: 'Tileset/warrior/warrior rolling.png' },
-            { name: 'warriorDeath', path: 'Tileset/warrior/warrior death.png' }
+            { name: 'warriorDeath', path: 'Tileset/warrior/warrior death.png' },
+            // Tiles individuelles
+            { name: 'tileBackground', path: 'tiles/Background.png' },
+            { name: 'tileLeftUpCorner', path: 'tiles/leftUpCorner.png' },
+            { name: 'tileRightUpCorner', path: 'tiles/rightUpCorner.png' },
+            { name: 'tileLeftDownCorner', path: 'tiles/leftDownCorner.png' },
+            { name: 'tileRightDownCorner', path: 'tiles/rightDownCorner.png' },
+            { name: 'tileInsideLeftUpCorner', path: 'tiles/insideLeftUpCorner.png' },
+            { name: 'tileInsideRightUpCorner', path: 'tiles/insideRightUpCorner.png' },
+            { name: 'tileInsideLeftDownCorner', path: 'tiles/insideLeftDownCorner.png' },
+            { name: 'tileInsideRightDownCorner', path: 'tiles/insideRightDownCorner.png' },
+            { name: 'tileUpSeparation', path: 'tiles/upSeparation.png' },
+            { name: 'tileDownSeparation', path: 'tiles/downSeparation.png' },
+            { name: 'tileLeftSeparation', path: 'tiles/leftSeparation.png' },
+            { name: 'tileRightSeparation', path: 'tiles/rightSeparation.png' }
         ];
 
         await Promise.all(resources.map(r => this.loadImage(r.name, r.path)));
@@ -673,112 +687,117 @@ class Tilemap {
         return tiles;
     }
 
-    // Détermine quel type de tuile utiliser selon les voisins (bitmasking avancé)
-    getAutoTileIndex(x, y) {
+    // Détermine quelle tile utiliser selon les voisins (auto-tiling avec tiles individuelles)
+    getTileName(x, y) {
         const hasTop = this.getTile(x, y - 1).solid;
         const hasBottom = this.getTile(x, y + 1).solid;
         const hasLeft = this.getTile(x - 1, y).solid;
         const hasRight = this.getTile(x + 1, y).solid;
 
-        // Coins diagonaux pour un rendu plus naturel
+        // Coins diagonaux
         const hasTopLeft = this.getTile(x - 1, y - 1).solid;
         const hasTopRight = this.getTile(x + 1, y - 1).solid;
         const hasBottomLeft = this.getTile(x - 1, y + 1).solid;
         const hasBottomRight = this.getTile(x + 1, y + 1).solid;
 
-        // Variation aléatoire pour éviter la répétition
-        const seed = (x * 7 + y * 13) % 3;
-        const variation = seed * 16; // Offset horizontal pour les variations
-
-        // Tuile pleine (entourée) - utiliser le centre avec variations
-        if (hasTop && hasBottom && hasLeft && hasRight) {
-            // Variation du centre pour briser la répétition
-            return { sx: 1, sy: 1, variant: seed };
+        // COINS EXTÉRIEURS (coins du bloc solide)
+        // Coin haut-gauche : pas de voisin en haut ni à gauche
+        if (!hasTop && !hasLeft && hasRight && hasBottom) {
+            return 'tileLeftUpCorner';
+        }
+        // Coin haut-droit : pas de voisin en haut ni à droite
+        if (!hasTop && !hasRight && hasLeft && hasBottom) {
+            return 'tileRightUpCorner';
+        }
+        // Coin bas-gauche : pas de voisin en bas ni à gauche
+        if (!hasBottom && !hasLeft && hasRight && hasTop) {
+            return 'tileLeftDownCorner';
+        }
+        // Coin bas-droit : pas de voisin en bas ni à droite
+        if (!hasBottom && !hasRight && hasLeft && hasTop) {
+            return 'tileRightDownCorner';
         }
 
-        // Surface supérieure (le haut de la plateforme)
-        if (!hasTop && hasBottom) {
-            if (!hasLeft && hasRight) return { sx: 0, sy: 0 }; // Coin sup gauche
-            else if (hasLeft && !hasRight) return { sx: 2, sy: 0 }; // Coin sup droit
-            else if (hasLeft && hasRight) return { sx: 1, sy: 0 }; // Bord sup
-            else return { sx: 1, sy: 0 }; // Plateforme isolée
+        // COINS INTÉRIEURS (quand on creuse dans un bloc)
+        // Coin intérieur haut-gauche : voisins sur 3 côtés mais pas en diagonale haut-gauche
+        if (hasTop && hasLeft && hasRight && hasBottom && !hasTopLeft) {
+            return 'tileInsideLeftUpCorner';
+        }
+        // Coin intérieur haut-droit
+        if (hasTop && hasLeft && hasRight && hasBottom && !hasTopRight) {
+            return 'tileInsideRightUpCorner';
+        }
+        // Coin intérieur bas-gauche
+        if (hasTop && hasLeft && hasRight && hasBottom && !hasBottomLeft) {
+            return 'tileInsideLeftDownCorner';
+        }
+        // Coin intérieur bas-droit
+        if (hasTop && hasLeft && hasRight && hasBottom && !hasBottomRight) {
+            return 'tileInsideRightDownCorner';
         }
 
-        // Surface inférieure (dessous de plateforme)
-        if (hasTop && !hasBottom) {
-            if (!hasLeft && hasRight) return { sx: 0, sy: 2 }; // Coin inf gauche
-            else if (hasLeft && !hasRight) return { sx: 2, sy: 2 }; // Coin inf droit
-            else if (hasLeft && hasRight) return { sx: 1, sy: 2 }; // Bord inf
-            else return { sx: 1, sy: 2 };
+        // SÉPARATIONS (bords)
+        // Bord haut : pas de voisin en haut mais des voisins à gauche et droite
+        if (!hasTop && hasLeft && hasRight && hasBottom) {
+            return 'tileUpSeparation';
+        }
+        // Bord bas : pas de voisin en bas mais des voisins à gauche et droite
+        if (hasTop && hasLeft && hasRight && !hasBottom) {
+            return 'tileDownSeparation';
+        }
+        // Bord gauche : pas de voisin à gauche mais des voisins en haut et en bas
+        if (hasTop && !hasLeft && hasRight && hasBottom) {
+            return 'tileLeftSeparation';
+        }
+        // Bord droit : pas de voisin à droite mais des voisins en haut et en bas
+        if (hasTop && hasLeft && !hasRight && hasBottom) {
+            return 'tileRightSeparation';
         }
 
-        // Bords verticaux
-        if (!hasLeft && hasRight && hasTop && hasBottom) return { sx: 0, sy: 1 }; // Bord gauche
-        if (hasLeft && !hasRight && hasTop && hasBottom) return { sx: 2, sy: 1 }; // Bord droit
-
-        // Plateforme fine (1 tuile de haut)
-        if (!hasTop && !hasBottom) {
-            if (!hasLeft && !hasRight) return { sx: 1, sy: 0 }; // Tuile unique
-            if (!hasLeft && hasRight) return { sx: 0, sy: 0 }; // Bout gauche
-            if (hasLeft && !hasRight) return { sx: 2, sy: 0 }; // Bout droit
-            return { sx: 1, sy: 0 }; // Milieu
-        }
-
-        // Coins intérieurs pour un rendu plus détaillé
-        if (hasTop && hasBottom && hasLeft && hasRight) {
-            if (!hasTopLeft) return { sx: 0, sy: 1 };
-            if (!hasTopRight) return { sx: 2, sy: 1 };
-            if (!hasBottomLeft) return { sx: 0, sy: 1 };
-            if (!hasBottomRight) return { sx: 2, sy: 1 };
-        }
-
-        return { sx: 1, sy: 1, variant: seed }; // Défaut avec variation
+        // Par défaut, utiliser le background (tuile pleine ou au centre)
+        return 'tileBackground';
     }
 
     draw(ctx, resourceManager) {
-        const tileset = resourceManager.get('tileset');
         const vegetation = resourceManager.get('vegetation');
+        const bgTile = resourceManager.get('tileBackground');
 
-        // Dessiner le background avec les tuiles sombres (top-left du tileset)
+        // Dessiner le background partout
         for (let y = 0; y < this.height; y++) {
             for (let x = 0; x < this.width; x++) {
                 const px = x * CONFIG.TILE_SIZE;
                 const py = y * CONFIG.TILE_SIZE;
 
-                if (tileset) {
-                    // Utiliser les 4 premières tuiles (dark) pour le background
-                    // Tileset est 64x64 (4x4 tuiles de 16x16)
-                    const bgVariant = ((x * 3 + y * 5) % 4);
-                    const bgX = (bgVariant % 2) * 16;
-                    const bgY = Math.floor(bgVariant / 2) * 16;
-
-                    ctx.drawImage(
-                        tileset,
-                        bgX, bgY, 16, 16,
-                        px, py, CONFIG.TILE_SIZE, CONFIG.TILE_SIZE
-                    );
+                if (bgTile) {
+                    ctx.drawImage(bgTile, px, py, CONFIG.TILE_SIZE, CONFIG.TILE_SIZE);
+                } else {
+                    // Fallback si l'image n'est pas chargée
+                    ctx.fillStyle = '#1a1a2e';
+                    ctx.fillRect(px, py, CONFIG.TILE_SIZE, CONFIG.TILE_SIZE);
                 }
             }
         }
 
-        // Dessiner les tuiles de terrain
+        // Dessiner les tuiles de terrain avec auto-tiling
         for (let y = 0; y < this.height; y++) {
             for (let x = 0; x < this.width; x++) {
                 const tile = this.tiles[y][x];
-                const px = x * CONFIG.TILE_SIZE;
-                const py = y * CONFIG.TILE_SIZE;
 
-                if (tile.type === 1 && tileset) {
-                    // Utiliser une seule tuile de terrain (bottom-right du tileset)
-                    // Pour un rendu uniforme
-                    const tileX = 32; // 3ème colonne
-                    const tileY = 32; // 3ème ligne
+                if (tile.type === 1) {
+                    const px = x * CONFIG.TILE_SIZE;
+                    const py = y * CONFIG.TILE_SIZE;
 
-                    ctx.drawImage(
-                        tileset,
-                        tileX, tileY, 16, 16,
-                        px, py, CONFIG.TILE_SIZE, CONFIG.TILE_SIZE
-                    );
+                    // Obtenir la bonne tile selon les voisins
+                    const tileName = this.getTileName(x, y);
+                    const tileImage = resourceManager.get(tileName);
+
+                    if (tileImage) {
+                        ctx.drawImage(tileImage, px, py, CONFIG.TILE_SIZE, CONFIG.TILE_SIZE);
+                    } else {
+                        // Fallback - tuile claire
+                        ctx.fillStyle = '#7c88cc';
+                        ctx.fillRect(px, py, CONFIG.TILE_SIZE, CONFIG.TILE_SIZE);
+                    }
                 }
             }
         }
