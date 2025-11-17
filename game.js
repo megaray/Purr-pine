@@ -302,6 +302,7 @@ class Tilemap {
         this.width = width;
         this.height = height;
         this.tiles = this.generateMap();
+        this.decorations = this.generateDecorations();
     }
 
     generateMap() {
@@ -311,7 +312,7 @@ class Tilemap {
         for (let y = 0; y < this.height; y++) {
             map[y] = [];
             for (let x = 0; x < this.width; x++) {
-                // Sol
+                // Sol principal
                 if (y >= 15) {
                     map[y][x] = { type: 1, solid: true };
                 }
@@ -333,6 +334,48 @@ class Tilemap {
         }
 
         return map;
+    }
+
+    generateDecorations() {
+        const decorations = [];
+
+        // Ajouter des plantes sur le sol
+        const flowerPositions = [2, 7, 11, 16, 20, 23];
+        for (const x of flowerPositions) {
+            decorations.push({
+                x: x,
+                y: 14,
+                type: 'flower',
+                spriteX: Math.floor(Math.random() * 3) * 16,
+                spriteY: 32
+            });
+        }
+
+        // Ajouter des champignons
+        const mushroomPositions = [4, 14, 19];
+        for (const x of mushroomPositions) {
+            decorations.push({
+                x: x,
+                y: 14,
+                type: 'mushroom',
+                spriteX: 48,
+                spriteY: 32
+            });
+        }
+
+        // Ajouter quelques stalactites en haut
+        const stalactitePositions = [3, 8, 13, 17, 22];
+        for (const x of stalactitePositions) {
+            decorations.push({
+                x: x,
+                y: 0,
+                type: 'stalactite',
+                spriteX: Math.floor(Math.random() * 4) * 16,
+                spriteY: 0
+            });
+        }
+
+        return decorations;
     }
 
     getTile(x, y) {
@@ -361,7 +404,55 @@ class Tilemap {
         return tiles;
     }
 
+    // Détermine quel type de tuile utiliser selon les voisins
+    getAutoTileIndex(x, y) {
+        const hasTop = this.getTile(x, y - 1).solid;
+        const hasBottom = this.getTile(x, y + 1).solid;
+        const hasLeft = this.getTile(x - 1, y).solid;
+        const hasRight = this.getTile(x + 1, y).solid;
+
+        // Tuile pleine (entourée)
+        if (hasTop && hasBottom && hasLeft && hasRight) {
+            return { sx: 1, sy: 1 }; // Centre
+        }
+        // Surface supérieure
+        else if (!hasTop && hasBottom) {
+            if (!hasLeft && hasRight) return { sx: 0, sy: 0 }; // Coin supérieur gauche
+            else if (hasLeft && !hasRight) return { sx: 2, sy: 0 }; // Coin supérieur droit
+            else if (hasLeft && hasRight) return { sx: 1, sy: 0 }; // Bord supérieur
+            else return { sx: 0, sy: 0 }; // Tuile isolée
+        }
+        // Surface inférieure
+        else if (hasTop && !hasBottom) {
+            if (!hasLeft && hasRight) return { sx: 0, sy: 2 }; // Coin inférieur gauche
+            else if (hasLeft && !hasRight) return { sx: 2, sy: 2 }; // Coin inférieur droit
+            else if (hasLeft && hasRight) return { sx: 1, sy: 2 }; // Bord inférieur
+            else return { sx: 1, sy: 2 };
+        }
+        // Bord gauche
+        else if (!hasLeft && hasRight && hasTop && hasBottom) {
+            return { sx: 0, sy: 1 };
+        }
+        // Bord droit
+        else if (hasLeft && !hasRight && hasTop && hasBottom) {
+            return { sx: 2, sy: 1 };
+        }
+        // Tuile seule (plateforme)
+        else if (!hasTop && !hasBottom) {
+            if (!hasLeft && hasRight) return { sx: 0, sy: 0 };
+            else if (hasLeft && !hasRight) return { sx: 2, sy: 0 };
+            else if (hasLeft && hasRight) return { sx: 1, sy: 0 };
+            else return { sx: 3, sy: 0 }; // Tuile unique
+        }
+
+        return { sx: 1, sy: 1 }; // Défaut
+    }
+
     draw(ctx, resourceManager) {
+        const tileset = resourceManager.get('tileset');
+        const vegetation = resourceManager.get('vegetation');
+
+        // Dessiner les tuiles de terrain
         for (let y = 0; y < this.height; y++) {
             for (let x = 0; x < this.width; x++) {
                 const tile = this.tiles[y][x];
@@ -369,12 +460,11 @@ class Tilemap {
                 const py = y * CONFIG.TILE_SIZE;
 
                 if (tile.type === 1) {
-                    // Dessiner la tuile de terrain
-                    const tileset = resourceManager.get('tileset');
                     if (tileset) {
-                        // Utiliser différentes tuiles selon la position
-                        const tileX = (x % 4) * 16;
-                        const tileY = (y % 4) * 16;
+                        const autoTile = this.getAutoTileIndex(x, y);
+                        const tileX = autoTile.sx * 16;
+                        const tileY = autoTile.sy * 16;
+
                         ctx.drawImage(
                             tileset,
                             tileX, tileY, 16, 16,
@@ -387,6 +477,20 @@ class Tilemap {
                         ctx.strokeRect(px, py, CONFIG.TILE_SIZE, CONFIG.TILE_SIZE);
                     }
                 }
+            }
+        }
+
+        // Dessiner les décorations
+        if (vegetation) {
+            for (const deco of this.decorations) {
+                const px = deco.x * CONFIG.TILE_SIZE;
+                const py = deco.y * CONFIG.TILE_SIZE;
+
+                ctx.drawImage(
+                    vegetation,
+                    deco.spriteX, deco.spriteY, 16, 16,
+                    px, py, CONFIG.TILE_SIZE, CONFIG.TILE_SIZE
+                );
             }
         }
     }
