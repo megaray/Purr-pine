@@ -414,90 +414,157 @@ class Tilemap {
             }
         }
 
-        // Créer un niveau organique de type grotte
-        // Sol principal avec contours irréguliers
-        for (let x = 0; x < this.width; x++) {
-            const baseHeight = 15;
-            const variation = Math.sin(x * 0.5) * 2 + Math.cos(x * 0.3) * 1.5;
-            const groundLevel = Math.floor(baseHeight + variation);
+        // Créer une grotte fermée verticale avec des murs épais
+        // Définir les murs extérieurs (3-4 tiles d'épaisseur)
+        const wallThickness = 3;
 
-            for (let y = groundLevel; y < this.height; y++) {
+        // Mur gauche
+        for (let y = 0; y < this.height; y++) {
+            for (let x = 0; x < wallThickness; x++) {
                 map[y][x] = { type: 1, solid: true };
             }
         }
 
-        // Creuser des cavités organiques dans le sol
-        this.carveCavity(map, 5, 16, 4, 2);
-        this.carveCavity(map, 15, 16, 5, 2);
-
-        // Plateformes organiques de différentes tailles
-        this.createOrganicPlatform(map, 3, 13, 5, 1);
-        this.createOrganicPlatform(map, 10, 11, 6, 1);
-        this.createOrganicPlatform(map, 18, 9, 4, 1);
-
-        // Plateforme plus épaisse
-        this.createOrganicPlatform(map, 7, 7, 4, 2);
-
-        // Colonne/pilier de grotte
-        this.createPillar(map, 13, 5, 8);
-
-        // Petites plateformes suspendues
-        this.createOrganicPlatform(map, 1, 10, 2, 1);
-        this.createOrganicPlatform(map, 22, 12, 2, 1);
-
-        // Escalier naturel
-        for (let i = 0; i < 4; i++) {
-            this.createOrganicPlatform(map, 19 + i, 14 - i, 2, 1);
+        // Mur droit
+        for (let y = 0; y < this.height; y++) {
+            for (let x = this.width - wallThickness; x < this.width; x++) {
+                map[y][x] = { type: 1, solid: true };
+            }
         }
+
+        // Plafond
+        for (let x = 0; x < this.width; x++) {
+            for (let y = 0; y < wallThickness; y++) {
+                map[y][x] = { type: 1, solid: true };
+            }
+        }
+
+        // Sol
+        for (let x = 0; x < this.width; x++) {
+            for (let y = this.height - wallThickness; y < this.height; y++) {
+                map[y][x] = { type: 1, solid: true };
+            }
+        }
+
+        // Ajouter des irrégularités aux murs pour un aspect organique
+        this.addWallVariations(map, wallThickness);
+
+        // Créer des plateformes qui partent des murs
+        // Plateformes du mur gauche
+        this.createWallPlatform(map, wallThickness, 6, 5, 'left');
+        this.createWallPlatform(map, wallThickness, 10, 4, 'left');
+        this.createWallPlatform(map, wallThickness, 15, 6, 'left');
+
+        // Plateformes du mur droit
+        this.createWallPlatform(map, wallThickness, 8, 5, 'right');
+        this.createWallPlatform(map, wallThickness, 12, 4, 'right');
+        this.createWallPlatform(map, wallThickness, 18, 5, 'right');
+
+        // Créer des passages/cavités dans les murs
+        this.carveCavePassage(map, 5, 4, 8);
+        this.carveCavePassage(map, 18, 10, 6);
+
+        // Piliers/stalactites qui descendent du plafond
+        this.createStalactitePillar(map, 10, wallThickness, 5);
+        this.createStalactitePillar(map, 20, wallThickness, 7);
+
+        // Stalagmites qui montent du sol
+        this.createStalagmitePillar(map, 8, this.height - wallThickness - 1, 4);
+        this.createStalagmitePillar(map, 22, this.height - wallThickness - 1, 3);
 
         return map;
     }
 
-    // Créer une plateforme avec bords irréguliers
-    createOrganicPlatform(map, startX, startY, width, height) {
-        for (let y = 0; y < height; y++) {
-            for (let x = 0; x < width; x++) {
-                const px = startX + x;
-                const py = startY + y;
+    // Ajouter des variations organiques aux murs
+    addWallVariations(map, wallThickness) {
+        // Mur gauche - ajouter des protubérances
+        for (let y = 5; y < this.height - 5; y++) {
+            if (Math.random() > 0.7) {
+                const depth = Math.floor(Math.random() * 2) + 1;
+                for (let d = 0; d < depth; d++) {
+                    if (wallThickness + d < this.width) {
+                        map[y][wallThickness + d] = { type: 1, solid: true };
+                    }
+                }
+            }
+        }
 
-                if (px >= 0 && px < this.width && py >= 0 && py < this.height) {
-                    // Ajouter de la variation aux bords
-                    if (x === 0 || x === width - 1) {
-                        // 20% de chance d'omettre un bord pour un aspect organique
-                        if (Math.random() > 0.2) {
-                            map[py][px] = { type: 1, solid: true };
-                        }
-                    } else {
-                        map[py][px] = { type: 1, solid: true };
+        // Mur droit - ajouter des protubérances
+        for (let y = 5; y < this.height - 5; y++) {
+            if (Math.random() > 0.7) {
+                const depth = Math.floor(Math.random() * 2) + 1;
+                for (let d = 0; d < depth; d++) {
+                    const x = this.width - wallThickness - 1 - d;
+                    if (x > 0) {
+                        map[y][x] = { type: 1, solid: true };
                     }
                 }
             }
         }
     }
 
-    // Créer un pilier vertical
-    createPillar(map, x, startY, height) {
-        for (let y = 0; y < height; y++) {
-            const py = startY + y;
-            if (x >= 0 && x < this.width && py >= 0 && py < this.height) {
-                map[py][x] = { type: 1, solid: true };
-                // Ajouter de la largeur variée
-                if (Math.random() > 0.3 && x + 1 < this.width) {
-                    map[py][x + 1] = { type: 1, solid: true };
+    // Créer une plateforme qui part d'un mur
+    createWallPlatform(map, wallThickness, yPos, length, side) {
+        const startX = side === 'left' ? wallThickness : this.width - wallThickness - length;
+
+        for (let x = 0; x < length; x++) {
+            const px = startX + x;
+
+            if (px >= 0 && px < this.width && yPos >= 0 && yPos < this.height) {
+                map[yPos][px] = { type: 1, solid: true };
+
+                // Ajouter une tuile en dessous parfois pour épaisseur
+                if (x < length - 2 && Math.random() > 0.5 && yPos + 1 < this.height) {
+                    map[yPos + 1][px] = { type: 1, solid: true };
                 }
             }
         }
     }
 
-    // Creuser une cavité dans le terrain
-    carveCavity(map, centerX, centerY, width, height) {
+    // Creuser un passage dans la grotte
+    carveCavePassage(map, yStart, xOffset, height) {
         for (let y = 0; y < height; y++) {
-            for (let x = 0; x < width; x++) {
-                const px = centerX + x - Math.floor(width / 2);
-                const py = centerY + y - Math.floor(height / 2);
+            const currentY = yStart + y;
+            if (currentY >= 0 && currentY < this.height) {
+                // Creuser plus large au milieu
+                const width = Math.sin((y / height) * Math.PI) * 3 + 2;
+                for (let x = 0; x < width; x++) {
+                    const px = xOffset + x;
+                    if (px >= 0 && px < this.width) {
+                        map[currentY][px] = { type: 0, solid: false };
+                    }
+                }
+            }
+        }
+    }
 
-                if (px >= 0 && px < this.width && py >= 0 && py < this.height) {
-                    map[py][px] = { type: 0, solid: false };
+    // Créer une stalactite/pilier qui descend
+    createStalactitePillar(map, x, startY, height) {
+        for (let y = 0; y < height; y++) {
+            const py = startY + y;
+            if (x >= 0 && x < this.width && py >= 0 && py < this.height) {
+                map[py][x] = { type: 1, solid: true };
+
+                // Largeur variable
+                if (y < height - 1 && Math.random() > 0.4) {
+                    if (x + 1 < this.width) map[py][x + 1] = { type: 1, solid: true };
+                    if (x - 1 >= 0) map[py][x - 1] = { type: 1, solid: true };
+                }
+            }
+        }
+    }
+
+    // Créer une stalagmite qui monte
+    createStalagmitePillar(map, x, startY, height) {
+        for (let y = 0; y < height; y++) {
+            const py = startY - y;
+            if (x >= 0 && x < this.width && py >= 0 && py < this.height) {
+                map[py][x] = { type: 1, solid: true };
+
+                // Plus large à la base
+                if (y === 0 || (y < 2 && Math.random() > 0.3)) {
+                    if (x + 1 < this.width) map[py][x + 1] = { type: 1, solid: true };
+                    if (x - 1 >= 0) map[py][x - 1] = { type: 1, solid: true };
                 }
             }
         }
@@ -789,13 +856,13 @@ class Game {
 
     reset() {
         this.tilemap = new Tilemap(CONFIG.MAP_WIDTH, CONFIG.MAP_HEIGHT);
-        // Position du joueur sur une plateforme sûre
-        this.player = new Player(120, 380, this.resourceManager);
+        // Position du joueur dans la grotte (centre, niveau bas)
+        this.player = new Player(480, 580, this.resourceManager);
         this.enemies = [
-            new Slime(140, 400, this.resourceManager),
-            new Slime(350, 320, this.resourceManager),
-            new Slime(580, 280, this.resourceManager),
-            new Slime(220, 200, this.resourceManager)
+            new Slime(200, 180, this.resourceManager),
+            new Slime(350, 250, this.resourceManager),
+            new Slime(680, 380, this.resourceManager),
+            new Slime(150, 470, this.resourceManager)
         ];
         this.score = 0;
         this.lives = 3;
@@ -844,8 +911,8 @@ class Game {
                         this.gameOver = true;
                     } else {
                         // Réapparition au point de départ
-                        this.player.x = 120;
-                        this.player.y = 380;
+                        this.player.x = 480;
+                        this.player.y = 580;
                         this.player.vx = 0;
                         this.player.vy = 0;
                     }
@@ -861,8 +928,8 @@ class Game {
                 this.gameOver = true;
             } else {
                 // Réapparition au point de départ
-                this.player.x = 120;
-                this.player.y = 380;
+                this.player.x = 480;
+                this.player.y = 580;
                 this.player.vx = 0;
                 this.player.vy = 0;
             }
