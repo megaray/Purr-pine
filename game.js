@@ -113,7 +113,7 @@ class Entity {
 // Classe joueur
 class Player extends Entity {
     constructor(x, y, resourceManager) {
-        super(x, y, 28, 28);
+        super(x, y, 24, 28);
         this.resourceManager = resourceManager;
         this.jumpPressed = false;
         this.facing = 1; // 1 = droite, -1 = gauche
@@ -124,11 +124,11 @@ class Player extends Entity {
         this.animationTimer = 0;
         this.animationSpeed = 120; // ms par frame
 
-        // Sprite sheet info
+        // Sprite sheet info - warrior run est 64x32 (4x2 frames de 16x16)
         this.spriteWidth = 16;
         this.spriteHeight = 16;
-        this.displayWidth = 40;  // Taille d'affichage plus grande
-        this.displayHeight = 40;
+        this.displayWidth = 48;  // Taille d'affichage
+        this.displayHeight = 48;
     }
 
     update(keys, tilemap, deltaTime) {
@@ -257,11 +257,14 @@ class Player extends Entity {
         let spriteSheet = this.resourceManager.get('warriorRun');
         let frameX = this.animationFrame % 4; // 4 frames par ligne
         let frameY = Math.floor(this.animationFrame / 4);
+        let maxFrames = 8;
 
         if (this.currentAnimation === 'roll') {
             spriteSheet = this.resourceManager.get('warriorRoll');
-            frameX = this.animationFrame % 2; // 2 frames par ligne pour rolling
-            frameY = Math.floor(this.animationFrame / 2);
+            // Rolling a 6 frames organisées en 3x2
+            frameX = this.animationFrame % 3;
+            frameY = Math.floor(this.animationFrame / 3);
+            maxFrames = 6;
         } else if (this.currentAnimation === 'idle') {
             spriteSheet = this.resourceManager.get('warriorRun');
             frameX = 0;
@@ -271,7 +274,7 @@ class Player extends Entity {
         if (spriteSheet) {
             ctx.save();
 
-            // Calculer la position centrée pour que le sprite soit centré sur la hitbox
+            // Centrer le sprite sur la hitbox
             const offsetX = (this.displayWidth - this.width) / 2;
             const offsetY = (this.displayHeight - this.height) / 2;
             const drawX = this.x - offsetX;
@@ -279,6 +282,7 @@ class Player extends Entity {
 
             // Flip horizontal si on regarde à gauche
             if (this.facing === -1) {
+                ctx.translate(this.x + this.width / 2, this.y + this.height / 2);
                 ctx.scale(-1, 1);
                 ctx.drawImage(
                     spriteSheet,
@@ -286,8 +290,8 @@ class Player extends Entity {
                     frameY * this.spriteHeight,
                     this.spriteWidth,
                     this.spriteHeight,
-                    -(drawX + this.displayWidth),
-                    drawY,
+                    -this.displayWidth / 2,
+                    -this.displayHeight / 2,
                     this.displayWidth,
                     this.displayHeight
                 );
@@ -307,8 +311,9 @@ class Player extends Entity {
 
             ctx.restore();
 
-            // DEBUG: Afficher la hitbox (à commenter en production)
+            // DEBUG: Afficher la hitbox
             // ctx.strokeStyle = 'red';
+            // ctx.lineWidth = 2;
             // ctx.strokeRect(this.x, this.y, this.width, this.height);
         } else {
             // Fallback si le sprite n'est pas chargé
@@ -734,33 +739,29 @@ class Tilemap {
         const tileset = resourceManager.get('tileset');
         const vegetation = resourceManager.get('vegetation');
 
-        // Dessiner le background avec les tuiles sombres et variations
+        // Dessiner le background avec les tuiles sombres (top-left du tileset)
         for (let y = 0; y < this.height; y++) {
             for (let x = 0; x < this.width; x++) {
                 const px = x * CONFIG.TILE_SIZE;
                 const py = y * CONFIG.TILE_SIZE;
 
                 if (tileset) {
-                    // Utiliser plusieurs variantes du background pour éviter la répétition
-                    const bgVariant = ((x * 3 + y * 5) % 9);
-                    const bgX = (bgVariant % 3) * 16;
-                    const bgY = Math.floor(bgVariant / 3) * 16;
+                    // Utiliser les 4 premières tuiles (dark) pour le background
+                    // Tileset est 64x64 (4x4 tuiles de 16x16)
+                    const bgVariant = ((x * 3 + y * 5) % 4);
+                    const bgX = (bgVariant % 2) * 16;
+                    const bgY = Math.floor(bgVariant / 2) * 16;
 
                     ctx.drawImage(
                         tileset,
                         bgX, bgY, 16, 16,
                         px, py, CONFIG.TILE_SIZE, CONFIG.TILE_SIZE
                     );
-
-                    // Ajouter un léger gradient sombre pour la profondeur
-                    const depth = y / this.height;
-                    ctx.fillStyle = `rgba(0, 0, 20, ${depth * 0.3})`;
-                    ctx.fillRect(px, py, CONFIG.TILE_SIZE, CONFIG.TILE_SIZE);
                 }
             }
         }
 
-        // Dessiner les tuiles de terrain avec auto-tiling
+        // Dessiner les tuiles de terrain
         for (let y = 0; y < this.height; y++) {
             for (let x = 0; x < this.width; x++) {
                 const tile = this.tiles[y][x];
@@ -768,32 +769,16 @@ class Tilemap {
                 const py = y * CONFIG.TILE_SIZE;
 
                 if (tile.type === 1 && tileset) {
-                    const autoTile = this.getAutoTileIndex(x, y);
-
-                    // Utiliser la partie claire pour les plateformes
-                    const tileX = 48 + (autoTile.sx * 16);
-                    const tileY = 32 + (autoTile.sy * 16);
+                    // Utiliser une seule tuile de terrain (bottom-right du tileset)
+                    // Pour un rendu uniforme
+                    const tileX = 32; // 3ème colonne
+                    const tileY = 32; // 3ème ligne
 
                     ctx.drawImage(
                         tileset,
                         tileX, tileY, 16, 16,
                         px, py, CONFIG.TILE_SIZE, CONFIG.TILE_SIZE
                     );
-
-                    // Ajouter un léger effet d'ombre sur les bords
-                    const hasTop = this.getTile(x, y - 1).solid;
-                    if (!hasTop) {
-                        // Highlight sur le dessus des plateformes
-                        ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
-                        ctx.fillRect(px, py, CONFIG.TILE_SIZE, 2);
-                    }
-
-                    const hasBottom = this.getTile(x, y + 1).solid;
-                    if (!hasBottom) {
-                        // Ombre sous les plateformes
-                        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-                        ctx.fillRect(px, py + CONFIG.TILE_SIZE - 3, CONFIG.TILE_SIZE, 3);
-                    }
                 }
             }
         }
